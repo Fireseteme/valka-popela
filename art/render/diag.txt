@@ -1,0 +1,5 @@
+DIAG objekty: {'roof': 116, 'a_grass2': 1000, 'stone_dark': 86, 'stone': 98, 'a_grass': 116, 'a_field': 116, 'wood': 234, 'water': 27, 'sand': 24, 'foam': 72, 'wood_dark': 540}
+DIAG pole (23, 0) uzlu: 1 [['water']]
+DIAG pole (24, 0) uzlu: 1 [['water']]
+DIAG pole (25, 0) uzlu: 1 [['water']]
+DIAG pole (24, 2) uzlu: 2 [['roof', 'a_grass2', 'a_grass2'], ['stone', 'stone_dark', 'wood_dark']]

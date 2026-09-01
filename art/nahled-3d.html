@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<title>Válka popela — náhled 3D dílků</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0f14;
+    font: 13px/1.5 "Segoe UI", system-ui, sans-serif; color: #dfe4ec; }
+  #cil { position: fixed; inset: 0; }
+  #hud { position: fixed; left: 12px; top: 12px; z-index: 5; padding: 10px 12px;
+    background: rgba(12,16,22,0.86); border: 1px solid #2c3540; border-radius: 10px;
+    min-width: 240px; backdrop-filter: blur(6px); }
+  #hud h1 { margin: 0 0 8px; font-size: 14px; color: #d9ab4f; font-weight: 600; }
+  #hud .r { display: flex; justify-content: space-between; gap: 12px; }
+  #hud .r b { color: #f0e2c0; font-weight: 600; }
+  #hud label { display: block; margin-top: 8px; color: #96a0ad; }
+  #hud input[type=range] { width: 100%; }
+  #hud .note { margin-top: 8px; color: #7d8895; font-size: 11.5px; line-height: 1.45; }
+  #load { position: fixed; inset: 0; display: grid; place-items: center;
+    background: #0b0f14; z-index: 9; color: #96a0ad; }
+</style>
+</head>
+<body>
+<div id="cil"></div>
+<div id="load">načítám modely…</div>
+<div id="hud">
+  <h1>Náhled 3D dílků</h1>
+  <div class="r"><span>Polí</span><b id="h-poli">–</b></div>
+  <div class="r"><span>Trojúhelníků</span><b id="h-tri">–</b></div>
+  <div class="r"><span>Volání kreslení</span><b id="h-draw">–</b></div>
+  <div class="r"><span>Snímků/s</span><b id="h-fps">–</b></div>
+  <label>Poloměr mapy: <span id="h-r">8</span>
+    <input type="range" id="rr" min="2" max="19" value="8"></label>
+  <label><input type="checkbox" id="stiny" checked> stíny</label>
+  <label><input type="checkbox" id="orto"> ortografická kamera (jako teď ve hře)</label>
+  <div class="note">Táhni myší = otáčení, kolečko = přiblížení.
+    Poloměr 19 je skutečná velikost herní mapy (1141 polí).</div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+    "three": "../js/vendor/three/three.module.min.js",
+    "three/addons/": "../js/vendor/three/addons/"
+} }
+</script>
+
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+const MODELY = "models/";
+const BIOMY = ["aldar", "yllien", "durgar", "horda"];
+const TERENY = ["plains", "forest", "hills"];
+// hex v Blenderu má poloměr 1 a špičku nahoru; po převodu do glTF míří špička
+// podél osy Z, takže rozteč je stejná jako u pointy-top mřížky ve hře
+const R = 1.0;
+
+const scena = new THREE.Scene();
+scena.background = new THREE.Color(0x9fb6d4);
+scena.fog = new THREE.Fog(0x9fb6d4, 26, 62);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFShadowMap;   // PCFSoft je v three 0.185 zrušený
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+document.getElementById("cil").appendChild(renderer.domElement);
+
+// --- kamery: perspektivní (nový pohled) a ortografická (jako dnešní izo) ---
+const persp = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.5, 400);
+persp.position.set(0, 22, 26);
+const ortoV = 18;
+const orto = new THREE.OrthographicCamera(-ortoV, ortoV, ortoV, -ortoV, 0.1, 400);
+orto.position.set(0, 26, 18);
+let kamera = persp;
+
+const rizeni = new OrbitControls(kamera, renderer.domElement);
+rizeni.target.set(0, 0, 0);
+rizeni.enableDamping = true;
+
+// --- světla: klíč + obloha + obrys, ať materiály nevypadají plastově ---
+const slunce = new THREE.DirectionalLight(0xfff0d8, 3.2);
+slunce.position.set(-16, 13, 9);   // níž nad obzorem = delší, čitelnější stíny
+slunce.castShadow = true;
+slunce.shadow.mapSize.set(2048, 2048);
+slunce.shadow.camera.near = 1;
+slunce.shadow.camera.far = 90;
+// rozsah stínové kamery se dopočítá podle velikosti mapy (viz zvetsiStin)
+Object.assign(slunce.shadow.camera, { left: -30, right: 30, top: 30, bottom: -30 });
+slunce.shadow.bias = -0.0009;
+slunce.shadow.normalBias = 0.02;
+scena.add(slunce);
+
+// POZOR na sílu oblohového světla: nad ~0,6 zaplní stíny tak, že vypadají,
+// jako by se vůbec nekreslily (stálo mě to hodinu hledání neexistující chyby)
+scena.add(new THREE.HemisphereLight(0xbfd6ff, 0x4a4436, 0.38));
+
+const obrys = new THREE.DirectionalLight(0xffd9a8, 0.45);
+obrys.position.set(12, 8, -16);
+scena.add(obrys);
+
+// --- načtení modelů ---
+const nacitac = new GLTFLoader();
+const sada = {};
+
+function nacti(jmeno) {
+  return new Promise((ok, chyba) => nacitac.load(MODELY + jmeno + ".glb",
+    g => {
+      const uzel = g.scene;
+      uzel.traverse(o => {
+        if (!o.isMesh) return;
+        o.castShadow = true;
+        o.receiveShadow = true;
+      });
+      sada[jmeno] = uzel;
+      ok(uzel);
+    }, undefined, chyba));
+}
+
+const seznam = [];
+for (const b of [...BIOMY, "center"]) for (const t of TERENY) seznam.push(b + "_" + t);
+seznam.push("water", "city", "fortress", "throne", "grandfort", "bastion", "wall", "ruins",
+  "capital_aldar", "capital_yllien", "capital_durgar", "capital_horda");
+
+// --- mapa ---
+const korenMapy = new THREE.Group();
+scena.add(korenMapy);
+
+function hash(q, r) {           // stejný princip jako v game.js — stálý výsledek
+  let h = (Math.imul(q, 73856093) ^ Math.imul(r, 19349663)) >>> 0;
+  h = Math.imul(h ^ (h >>> 16), 2246822507) >>> 0;
+  h = Math.imul(h ^ (h >>> 13), 3266489909) >>> 0;
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+function biom(q, r) {
+  const d = (Math.abs(q) + Math.abs(r) + Math.abs(q + r)) / 2;
+  if (d < 4) return "center";
+  if (q >= 0 && r < 0) return "aldar";
+  if (q > 0 && r >= 0) return "yllien";
+  if (q <= 0 && r > 0) return "durgar";
+  return "horda";
+}
+
+// Rozebere načtený model na dvojice (geometrie, materiál) + jejich místní
+// transformaci. Z toho pak jde postavit InstancedMesh: stejný kus geometrie
+// se vykreslí jednou pro všechna pole daného druhu.
+const KUSY = {};   // jméno dílku → [{geometry, material, matrix}]
+function rozeber(jmeno) {
+  if (KUSY[jmeno]) return KUSY[jmeno];
+  const koren = sada[jmeno];
+  const ven = [];
+  if (!koren) return (KUSY[jmeno] = ven);
+  koren.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(koren.matrixWorld).invert();
+  koren.traverse(o => {
+    if (!o.isMesh) return;
+    const m = new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld);
+    ven.push({ geometry: o.geometry, material: o.material, matrix: m });
+  });
+  return (KUSY[jmeno] = ven);
+}
+
+function dilekPole(q, r, polomer) {
+  const d = (Math.abs(q) + Math.abs(r) + Math.abs(q + r)) / 2;
+  const h = hash(q, r);
+  if (q === 0 && r === 0) return "throne";
+  if (d === polomer && h < 0.5) return "wall";
+  if (h > 0.965) return "city";
+  if (h > 0.94) return "fortress";
+  if (h > 0.925) return "ruins";
+  if (h < 0.05) return "water";
+  const t = TERENY[Math.floor(hash(q + 7, r - 3) * TERENY.length)];
+  return biom(q, r) + "_" + t;
+}
+
+function postavMapu(polomer) {
+  for (const d of [...korenMapy.children]) {
+    korenMapy.remove(d);
+    if (d.isInstancedMesh) d.dispose();
+  }
+  // 1) roztřídit pole podle druhu dílku
+  const podleDruhu = new Map();
+  let pocet = 0;
+  for (let q = -polomer; q <= polomer; q++) {
+    for (let r = Math.max(-polomer, -q - polomer); r <= Math.min(polomer, -q + polomer); r++) {
+      const jmeno = dilekPole(q, r, polomer);
+      if (!sada[jmeno]) continue;
+      let pole = podleDruhu.get(jmeno);
+      if (!pole) podleDruhu.set(jmeno, pole = []);
+      pole.push([Math.sqrt(1.5) * R * (q - r), 0, Math.sqrt(1.5) * R * (q + r)]);
+      pocet++;
+    }
+  }
+  // 2) na každou dvojici (druh dílku × kus geometrie) jedno InstancedMesh
+  let tri = 0;
+  const pom = new THREE.Matrix4(), posun = new THREE.Matrix4();
+  for (const [jmeno, mista] of podleDruhu) {
+    for (const kus of rozeber(jmeno)) {
+      const im = new THREE.InstancedMesh(kus.geometry, kus.material, mista.length);
+      im.castShadow = true;
+      im.receiveShadow = true;
+      mista.forEach(([x, y, z], i) => {
+        posun.makeTranslation(x, y, z);
+        pom.multiplyMatrices(posun, kus.matrix);
+        im.setMatrixAt(i, pom);
+      });
+      im.instanceMatrix.needsUpdate = true;
+      korenMapy.add(im);
+      const g = kus.geometry;
+      tri += (g.index ? g.index.count : g.attributes.position.count) / 3 * mista.length;
+    }
+  }
+  // stínová kamera musí obsáhnout celou mapu, jinak stíny na okrajích zmizí
+  const dosah = Math.sqrt(3) * R * (polomer + 1.5);
+  Object.assign(slunce.shadow.camera,
+    { left: -dosah, right: dosah, top: dosah, bottom: -dosah, far: dosah * 4 });
+  slunce.shadow.camera.updateProjectionMatrix();
+  document.getElementById("h-poli").textContent = pocet;
+  document.getElementById("h-tri").textContent = Math.round(tri).toLocaleString("cs");
+}
+
+// --- ovládání ---
+const rr = document.getElementById("rr");
+rr.addEventListener("input", () => {
+  document.getElementById("h-r").textContent = rr.value;
+  postavMapu(parseInt(rr.value, 10));
+});
+document.getElementById("stiny").addEventListener("change", e => {
+  renderer.shadowMap.enabled = e.target.checked;
+  scena.traverse(o => { if (o.isMesh) o.material.needsUpdate = true; });
+});
+document.getElementById("orto").addEventListener("change", e => {
+  kamera = e.target.checked ? orto : persp;
+  rizeni.object = kamera;
+  rizeni.update();
+  zmenVelikost();
+});
+
+function zmenVelikost() {
+  const a = innerWidth / innerHeight;
+  persp.aspect = a; persp.updateProjectionMatrix();
+  orto.left = -ortoV * a; orto.right = ortoV * a;
+  orto.top = ortoV; orto.bottom = -ortoV;
+  orto.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+}
+addEventListener("resize", zmenVelikost);
+
+// --- smyčka ---
+let poslední = performance.now(), snimku = 0;
+function smycka() {
+  requestAnimationFrame(smycka);
+  rizeni.update();
+  renderer.render(scena, kamera);
+  snimku++;
+  const ted = performance.now();
+  if (ted - poslední > 500) {
+    document.getElementById("h-fps").textContent = Math.round(snimku * 1000 / (ted - poslední));
+    document.getElementById("h-draw").textContent = renderer.info.render.calls;
+    poslední = ted; snimku = 0;
+  }
+}
+
+// ladicí hák — v konzoli pak jde sahat na scénu, světla i přestavbu mapy
+window.VP3D = { THREE, scena, renderer, slunce, obrys, sada, KUSY, korenMapy,
+  postavMapu, kamera: () => kamera };
+
+Promise.all(seznam.map(nacti)).then(() => {
+  document.getElementById("load").remove();
+  zmenVelikost();
+  postavMapu(8);
+  smycka();
+}).catch(e => {
+  document.getElementById("load").textContent = "chyba načítání: " + e.message;
+  console.error(e);
+});
+</script>
+</body>
+</html>

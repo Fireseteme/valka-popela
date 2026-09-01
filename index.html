@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Válka popela</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header id="topbar">
+    <div class="brand">⚔ Válka popela <span class="ver">v0.70</span></div>
+    <div class="res"><span class="ico">🌾</span><span id="res-food">0</span></div>
+    <div class="res"><span class="ico">🪵</span><span id="res-wood">0</span></div>
+    <div class="res" data-tx-title="ui.res.stone"><span class="ico">🪨</span><span id="res-stone">0</span></div>
+    <div class="res" data-tx-title="ui.res.iron"><span class="ico">⚙</span><span id="res-iron">0</span></div>
+    <div class="res"><span class="ico">🪙</span><span id="res-gold">0</span></div>
+    <div class="res" data-tx-title="ui.res.cores"><span class="ico">💠</span><span id="res-cores">0</span></div>
+    <div class="res"><span class="ico">🗡</span><span id="res-inf">0</span></div>
+    <div class="res"><span class="ico">🏹</span><span id="res-arch">0</span></div>
+    <div class="res"><span class="ico">🐎</span><span id="res-cav">0</span></div>
+    <div class="res"><span id="res-training" class="training"></span></div>
+    <div class="res" id="ring-chip" data-tx-title="ui.prsten">
+      <span class="ico">⭘</span><span id="ring-lvl">0</span>
+      <span class="ico">⚡</span><span id="ring-ap">24</span></div>
+    <div class="res clickable" id="land-chip"
+      data-tx-title="ui.pole">
+      <span class="ico">🗺</span><span id="land-count">0/0</span></div>
+    <div class="timer"><span data-tx="ui.konec.sezony">Konec sezóny za</span> <span id="season-timer">20:00</span></div>
+    <button id="btn-quit" class="hidden"
+      data-tx-title="ui.konec.t" data-tx="ui.konec">✕ Konec</button>
+    <button id="btn-sound" data-tx-title="ui.zvuk">🔊</button>
+  </header>
+
+  <div id="main">
+    <div id="canvas-wrap">
+      <!-- 3D terén (three.js) leží pod 2D překryvem; myš obsluhuje jen #map -->
+      <canvas id="map3d"></canvas>
+      <canvas id="map"></canvas>
+      <div id="map-tip" class="hidden"></div>
+      <div id="tile-menu" class="hidden"></div>
+      <!-- v0.63: filtry se zabalily do JEDNOHO tlačítka s nabídkou. Osm tlačítek
+           vedle sebe zabíralo celou šířku nad mapou a sloupec hrdinů (#hero-strip)
+           jim lezl do cesty. Obsah nabídky se skládá až v main.js, ať jde přeložit. -->
+      <div id="map-filters">
+        <button class="mf-btn mf-toggle" id="mf-toggle"></button>
+        <div id="mf-menu" class="hidden"></div>
+      </div>
+      <!-- minimapa (v0.33): přehled světa + rámeček pohledu, klik = skok kamery -->
+      <canvas id="minimap" class="hidden" data-tx-title="ui.minimapa"></canvas>
+      <!-- kontextové okno vybraného pole (levý dolní roh mapy) -->
+      <section id="tile-panel" class="hidden"></section>
+      <!-- seznam držených polí (v0.39): klik na 🗺 v liště; řadí dle úrovně -->
+      <section id="land-panel" class="hidden"></section>
+      <!-- boční lišta: každá agenda má vlastní okno -->
+      <nav id="side-rail">
+        <button class="rail-btn" id="rail-home" data-tx-title="ui.rail.domu">🏰</button>
+        <button class="rail-btn" data-win="heroes" data-tx-title="ui.rail.hrdinove">⚑<span class="rail-badge hidden" id="badge-heroes"></span></button>
+        <button class="rail-btn" data-win="branch" data-tx-title="ui.rail.cile">🌿<span class="rail-badge hidden" id="badge-realm"></span></button>
+        <button class="rail-btn" data-win="mail" data-tx-title="ui.rail.kronika">📩<span class="rail-badge hidden" id="badge-mail"></span></button>
+        <button class="rail-btn" data-win="chests" data-tx-title="ui.rail.truhly">💠</button>
+      </nav>
+      <div id="hero-strip"></div>
+      <section id="side-win" class="hidden">
+        <div class="side-win-head">
+          <h4 id="side-win-title"></h4><div id="win-tabs" class="hidden"></div>
+          <button id="side-win-close" class="close-x">✕</button>
+        </div>
+        <div class="side-win-body">
+          <div class="win-sec hidden" data-sec="build"><div id="build-panel"></div></div>
+          <div class="win-sec hidden" data-sec="train"><div id="train-panel"></div></div>
+          <div class="win-sec hidden" data-sec="upgrade"><div id="upgrade-panel"></div></div>
+          <div class="win-sec hidden" data-sec="market"><div id="market-panel"></div></div>
+          <div class="win-sec hidden" data-sec="heroes"><div id="heroes-panel"></div></div>
+          <div class="win-sec hidden" data-sec="realm"><div id="scores"></div><div id="diplo-offers"></div></div>
+          <div class="win-sec hidden" data-sec="goals"><div id="goals"></div></div>
+          <div class="win-sec hidden" data-sec="klan"><div id="klan-panel"></div></div>
+          <div class="win-sec hidden" data-sec="chat"><div id="chat-panel"></div></div>
+          <div class="win-sec hidden" data-sec="burza"><div id="burza-panel"></div></div>
+          <div class="win-sec hidden" data-sec="log"><div id="log"></div></div>
+          <div class="win-sec hidden" data-sec="chests"><div id="chests-panel"></div></div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Domovská síň (etapa 5b): první obrazovka hry. Nepřihlášenému ukáže, co
+       Válka popela je, a nabídne účet; přihlášenému rozcestník na sezónu,
+       výbavu a profil. Výběr frakce „hrát hned" žije dál ve #start-overlay. -->
+  <div id="home-overlay" class="overlay">
+    <div id="home">
+      <header id="home-top">
+        <div class="home-brand">⚔ <span>Válka popela</span></div>
+        <nav id="home-nav" class="hidden"></nav>
+        <div id="home-acct"></div>
+      </header>
+      <main id="home-body"></main>
+    </div>
+  </div>
+
+  <div id="start-overlay" class="overlay hidden">
+    <div class="dialog">
+      <a href="#" id="btn-domu" class="zpet-domu" data-tx="ui.zpet.domu">← Domovská síň</a>
+      <h1>⚔ Válka popela</h1>
+      <p id="start-intro">Příměří končí. Vyber frakci a doveď ji k Trůnnímu městu dřív,<br>
+         než sezóna skončí. Dobývat lze jen pole sousedící s tvým územím.</p>
+      <div id="faction-cards"></div>
+      <!-- v0.30: tlačítko startu žije POD kartami — krok výběru hrdiny zrušil
+           v0.27 (startovního hrdinu dává frakce) a s ním se schoval i start -->
+      <button id="btn-start-game" disabled>Vyber stranu</button>
+      <div id="hero-select" class="hidden">
+        <div id="hero-pick-cards"></div>
+        <a href="#" id="btn-back-factions" data-tx="ui.zpet.frakce">← zpět na výběr frakce</a>
+      </div>
+      <div id="mp-box">
+        <h3 data-tx="ui.mp.nadpis">🌐 Hra s přáteli</h3>
+        <div id="mp-connect">
+          <input id="mp-name" maxlength="24" data-tx-ph="ui.mp.jmeno">
+          <button id="btn-mp-join" data-tx="ui.mp.pripojit">Připojit se</button>
+          <p class="hint" data-tx="ui.mp.hint">Všichni otevřou tuhle adresu v prohlížeči a připojí se. Frakce, které si nikdo nevezme, dohraje AI.</p>
+        </div>
+        <div id="mp-lobby" class="hidden">
+          <div id="acc-box"></div>
+          <div id="mp-players"></div>
+          <p id="mp-status" class="hint"></p>
+          <button id="btn-mp-start" disabled data-tx="ui.mp.spustit">⚔ Spustit hru pro všechny</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="hero-overlay" class="overlay hidden">
+    <div class="dialog hero-dialog">
+      <button type="button" class="close-x" id="hero-close">✕</button>
+      <div id="hero-window"></div>
+    </div>
+  </div>
+
+  <div id="report-overlay" class="overlay hidden">
+    <div class="dialog report-dialog">
+      <button type="button" class="close-x" id="report-close">✕</button>
+      <div id="report-window"></div>
+    </div>
+  </div>
+
+  <div id="end-overlay" class="overlay hidden">
+    <div class="dialog">
+      <h1 id="end-title" data-tx="ui.sezona.skoncila">Sezóna skončila</h1>
+      <table id="end-table"></table>
+      <button id="btn-again" data-tx="ui.nova.sezona">Nová sezóna</button>
+    </div>
+  </div>
+
+<!-- three.js je vendorovaný v js/vendor/three (není v package.json — kamarádi
+     by si jinak přes npm install stahovali 25 MB pro nic) -->
+<script type="importmap">
+{ "imports": {
+    "three": "./js/vendor/three/three.module.min.js",
+    "three/addons/": "./js/vendor/three/addons/"
+} }
+</script>
+<!-- modul je odložený (defer), takže window.R3 existuje dřív, než se na
+     DOMContentLoaded spustí initRender() -->
+<script type="module" src="js/render3d.js"></script>
+<script src="js/sfx.js"></script>
+<script src="js/jazyky.js"></script>
+  <script src="js/game.js"></script>
+<script src="js/render.js"></script>
+<script src="js/portraits.js"></script>
+<script src="js/main.js"></script>
+<script src="js/domov.js"></script>
+<script src="js/net.js"></script>
+</body>
+</html>

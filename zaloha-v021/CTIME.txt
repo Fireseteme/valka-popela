@@ -1,0 +1,1 @@
+Záloha funkčního stavu v0.21 (mapa na čtverce) před přidáním stop staveb 2×2/3×3. Kdyby něco, stačí soubory nakopírovat zpět (game/render/render3d/main → js/, server.js → server/). Po ověření stop smazat.

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<title>Válka popela — test izometrických spritů</title>
+<style>
+  body { margin: 0; background: #10151c; display: flex; flex-direction: column;
+         align-items: center; font-family: "Segoe UI", sans-serif; color: #e9e3d4; }
+  h1 { font-size: 16px; font-weight: 600; margin: 14px 0 4px; }
+  p  { font-size: 12px; color: #97a1ae; margin: 0 0 10px; }
+  canvas { image-rendering: auto; }
+</style>
+</head>
+<body>
+<h1>Test: předrenderované izo-sprity z Blenderu</h1>
+<p>Stejná hexová logika jako ve hře — jen se místo plochých šestiúhelníků skládají obrázky.</p>
+<canvas id="c" width="1400" height="900"></canvas>
+<script>
+// Geometrie musí sedět s kamerou v make_tiles.py:
+// ortho_scale 3.2 přes 512 px => 160 px / blender-jednotku, náklon 55°.
+const PX_PER_UNIT = 512 / 3.2;
+const SQUASH = Math.cos(55 * Math.PI / 180);          // 0.574 — zploštění osy Y
+const DX = Math.sqrt(3) * PX_PER_UNIT;                // rozteč sloupců (276 px)
+const DY = 1.5 * PX_PER_UNIT * SQUASH;                // rozteč řad (138 px)
+const SCALE = 0.5;
+
+const NAMES = ["grass", "forest", "mountain", "water", "city"];
+const IMG = {};
+let loaded = 0;
+for (const n of NAMES) {
+  const im = new Image();
+  im.onload = () => { if (++loaded === NAMES.length) draw(); };
+  im.src = "render/" + n + ".png";
+  IMG[n] = im;
+}
+
+// malá mapa poloměru 3 — ručně rozmístěné terény ať je vidět skladba
+const R = 3;
+const SPECIAL = {
+  "0,0": "city",
+  "-2,1": "mountain", "-1,-1": "mountain", "2,-3": "mountain", "3,-1": "mountain",
+  "1,1": "forest", "-1,2": "forest", "-3,1": "forest", "2,0": "forest", "0,-2": "forest",
+  "1,-1": "water", "0,2": "water", "-2,3": "water", "-3,0": "water",
+};
+
+function draw() {
+  const ctx = document.getElementById("c").getContext("2d");
+  const cx = 700, cy = 430;
+  const tiles = [];
+  for (let q = -R; q <= R; q++)
+    for (let r = -R; r <= R; r++) {
+      if (Math.abs(q + r) > R) continue;
+      tiles.push({ q, r, kind: SPECIAL[q + "," + r] || "grass" });
+    }
+  // malíř: kreslí se odzadu (menší r dřív), aby hory překrývaly pole za sebou
+  tiles.sort((a, b) => a.r - b.r || a.q - b.q);
+  for (const t of tiles) {
+    const x = cx + (t.q + t.r / 2) * DX * SCALE;
+    const y = cy + t.r * DY * SCALE;
+    const s = 512 * SCALE;
+    ctx.drawImage(IMG[t.kind], x - s / 2, y - s / 2, s, s);
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "valka-popela",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "server/server.js",
+        "8123",
+        "336"
+      ],
+      "port": 8123
+    }
+  ]
+}

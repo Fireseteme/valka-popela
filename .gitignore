@@ -1,0 +1,14 @@
+# ⚠ OSTRÁ DATA HRÁČŮ — do repozitáře NESMÍ NIKDY.
+# Na serveru je server/data odkaz do /opt/warofash/data; nasadit.sh je
+# z balíčku maže. Kdyby se sem dostala, přepsala by účty hráčů.
+server/data/
+
+# závislosti — obnoví se přes `npm install`
+node_modules/
+
+# smetí
+*.log
+*.tmp
+Thumbs.db
+desktop.ini
+.DS_Store
